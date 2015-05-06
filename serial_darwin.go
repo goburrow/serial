@@ -2,7 +2,6 @@ package serial
 
 import (
 	"fmt"
-	"time"
 )
 
 var errNotImplemented = fmt.Errorf("not implemented")
@@ -10,7 +9,7 @@ var errNotImplemented = fmt.Errorf("not implemented")
 type port struct {
 }
 
-func New() {
+func New() Port {
 	return &port{}
 }
 

@@ -7,8 +7,8 @@ import (
 
 const (
 	// socat -d -d pty,raw,echo=0 pty,raw,echo=0
-	pty1 = "/dev/pts/5"
-	pty2 = "/dev/pts/6"
+	pty1 = "/dev/ttys009"
+	pty2 = "/dev/ttys010"
 )
 
 func TestReadWrite(t *testing.T) {

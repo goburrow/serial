@@ -25,8 +25,10 @@ func main() {
 ```
 ## Testing
 
-### Linux
+### Linux and Mac OS
 - `socat -d -d pty,raw,echo=0 pty,raw,echo=0`
+- on Mac OS, the socat command can be installed using homebrew:
+	````brew install socat````
 
 ### Windows
 - [Null-modem emulator](http://com0com.sourceforge.net/)

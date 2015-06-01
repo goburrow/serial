@@ -112,9 +112,15 @@ func (p *port) Read(b []byte) (n int, err error) {
 		timeout := syscall.NsecToTimeval(p.timeout.Nanoseconds())
 		tv = &timeout
 	}
-	if _, err = syscall.Select(fd+1, &rfds, nil, nil, tv); err != nil {
-		err = fmt.Errorf("serial: could not select: %v", err)
-		return
+	for {
+		// If syscall.Select() returns EINTR (Interrupted system call), retry it
+		if _, err = syscall.Select(fd+1, &rfds, nil, nil, tv); err == nil {
+			break
+		}
+		if err != syscall.EINTR {
+			err = fmt.Errorf("serial: could not select: %v", err)
+			return
+		}
 	}
 	if !fdIsSet(fd, &rfds) {
 		// Timeout

@@ -97,7 +97,11 @@ func newHandle(c *Config) (handle syscall.Handle, err error) {
 		}
 	}()
 	var dcb C.DCB
-	dcb.BaudRate = C.DWORD(c.BaudRate)
+	if c.BaudRate == 0 {
+		dcb.BaudRate = 19200
+	} else {
+		dcb.BaudRate = C.DWORD(c.BaudRate)
+	}
 	// Data bits
 	if c.DataBits == 0 {
 		dcb.ByteSize = 8

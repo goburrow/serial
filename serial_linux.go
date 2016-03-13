@@ -3,7 +3,6 @@ package serial
 import (
 	"fmt"
 	"log"
-	"os"
 	"syscall"
 	"time"
 	"unsafe"
@@ -51,8 +50,7 @@ var charSizes = map[int]uint32{
 
 // port implements Port interface.
 type port struct {
-	// Should use fd directly by using syscall.Open() ?
-	file       *os.File
+	fd         int
 	oldTermios *syscall.Termios
 
 	timeout time.Duration
@@ -60,7 +58,7 @@ type port struct {
 
 // New allocates and returns a new serial port controller.
 func New() Port {
-	return &port{}
+	return &port{fd: -1}
 }
 
 // Open connects to the given serial port.
@@ -72,15 +70,15 @@ func (p *port) Open(c *Config) (err error) {
 	// See man termios(3).
 	// O_NOCTTY: no controlling terminal.
 	// O_NDELAY: no data carrier detect.
-	p.file, err = os.OpenFile(c.Address, syscall.O_RDWR|syscall.O_NOCTTY|syscall.O_NDELAY, os.FileMode(0666))
+	p.fd, err = syscall.Open(c.Address, syscall.O_RDWR|syscall.O_NOCTTY|syscall.O_NDELAY|syscall.O_CLOEXEC, 0666)
 	if err != nil {
 		return
 	}
 	// Backup current termios to restore on closing.
 	p.backupTermios()
 	if err = p.setTermios(termios); err != nil {
-		p.file.Close()
-		p.file = nil
+		syscall.Close(p.fd)
+		p.fd = -1
 		p.oldTermios = nil
 		return
 	}
@@ -89,12 +87,12 @@ func (p *port) Open(c *Config) (err error) {
 }
 
 func (p *port) Close() (err error) {
-	if p.file == nil {
+	if p.fd == -1 {
 		return
 	}
 	p.restoreTermios()
-	err = p.file.Close()
-	p.file = nil
+	err = syscall.Close(p.fd)
+	p.fd = -1
 	p.oldTermios = nil
 	return
 }
@@ -104,7 +102,7 @@ func (p *port) Close() (err error) {
 func (p *port) Read(b []byte) (n int, err error) {
 	var rfds syscall.FdSet
 
-	fd := int(p.file.Fd())
+	fd := p.fd
 	fdSet(fd, &rfds)
 
 	var tv *syscall.Timeval
@@ -127,18 +125,18 @@ func (p *port) Read(b []byte) (n int, err error) {
 		err = ErrTimeout
 		return
 	}
-	n, err = p.file.Read(b)
+	n, err = syscall.Read(fd, b)
 	return
 }
 
 // Write writes data to the serial port.
 func (p *port) Write(b []byte) (n int, err error) {
-	n, err = p.file.Write(b)
+	n, err = syscall.Write(p.fd, b)
 	return
 }
 
 func (p *port) setTermios(termios *syscall.Termios) (err error) {
-	if err = tcsetattr(int(p.file.Fd()), termios); err != nil {
+	if err = tcsetattr(p.fd, termios); err != nil {
 		err = fmt.Errorf("serial: could not set setting: %v", err)
 	}
 	return
@@ -148,7 +146,7 @@ func (p *port) setTermios(termios *syscall.Termios) (err error) {
 // Make sure that device file has been opened before calling this function.
 func (p *port) backupTermios() {
 	oldTermios := &syscall.Termios{}
-	if err := tcgetattr(int(p.file.Fd()), oldTermios); err != nil {
+	if err := tcgetattr(p.fd, oldTermios); err != nil {
 		// Warning only.
 		log.Printf("serial: could not get setting: %v\n", err)
 		return
@@ -163,7 +161,7 @@ func (p *port) restoreTermios() {
 	if p.oldTermios == nil {
 		return
 	}
-	if err := tcsetattr(int(p.file.Fd()), p.oldTermios); err != nil {
+	if err := tcsetattr(p.fd, p.oldTermios); err != nil {
 		// Warning only.
 		log.Printf("serial: could not restore setting: %v\n", err)
 		return
@@ -181,12 +179,14 @@ func newTermios(c *Config) (termios *syscall.Termios, err error) {
 		// 19200 is the required default.
 		flag = syscall.B19200
 	} else {
-		flag = baudRates[c.BaudRate]
-		if flag == 0 {
+		var ok bool
+		flag, ok = baudRates[c.BaudRate]
+		if !ok {
 			err = fmt.Errorf("serial: unsupported baud rate %v", c.BaudRate)
 			return
 		}
 	}
+	termios.Cflag |= flag
 	// Input baud.
 	termios.Ispeed = flag
 	// Output baud.
@@ -195,8 +195,9 @@ func newTermios(c *Config) (termios *syscall.Termios, err error) {
 	if c.DataBits == 0 {
 		flag = syscall.CS8
 	} else {
-		flag = charSizes[c.DataBits]
-		if flag == 0 {
+		var ok bool
+		flag, ok = charSizes[c.DataBits]
+		if !ok {
 			err = fmt.Errorf("serial: unsupported character size %v", c.DataBits)
 			return
 		}

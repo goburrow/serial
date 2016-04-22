@@ -1,3 +1,5 @@
+// +build darwin linux
+
 package serial
 
 import (

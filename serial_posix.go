@@ -1,4 +1,4 @@
-// +build darwin linux
+// +build darwin linux freebsd openbsd netbsd
 
 package serial
 
@@ -64,7 +64,7 @@ func (p *port) Read(b []byte) (n int, err error) {
 	var rfds syscall.FdSet
 
 	fd := p.fd
-	fdSet(fd, &rfds)
+	fdset(fd, &rfds)
 
 	var tv *syscall.Timeval
 	if p.timeout > 0 {
@@ -81,7 +81,7 @@ func (p *port) Read(b []byte) (n int, err error) {
 			return
 		}
 	}
-	if !fdIsSet(fd, &rfds) {
+	if !fdisset(fd, &rfds) {
 		// Timeout
 		err = ErrTimeout
 		return
@@ -202,23 +202,4 @@ func newTermios(c *Config) (termios *syscall.Termios, err error) {
 	// VTIME: Time in deciseconds for noncanonical read.
 	// Both are unused as NDELAY is we utilized when opening device.
 	return
-}
-
-// fdGet returns index and offset of fd in fds.
-func fdGet(fd int, fds *syscall.FdSet) (index, offset int) {
-	index = fd / (syscall.FD_SETSIZE / len(fds.Bits)) % len(fds.Bits)
-	offset = fd % (syscall.FD_SETSIZE / len(fds.Bits))
-	return
-}
-
-// fdSet implements FD_SET macro.
-func fdSet(fd int, fds *syscall.FdSet) {
-	idx, pos := fdGet(fd, fds)
-	fds.Bits[idx] = 1 << uint(pos)
-}
-
-// fdIsSet implements FD_ISSET macro.
-func fdIsSet(fd int, fds *syscall.FdSet) bool {
-	idx, pos := fdGet(fd, fds)
-	return fds.Bits[idx]&(1<<uint(pos)) != 0
 }

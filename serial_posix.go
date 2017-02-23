@@ -38,12 +38,17 @@ func (p *port) Open(c *Config) (err error) {
 	// Backup current termios to restore on closing.
 	p.backupTermios()
 	if err = p.setTermios(termios); err != nil {
-		syscall.Close(p.fd)
-		p.fd = -1
-		p.oldTermios = nil
-		return
+		goto cleanup
+	}
+	if err = enable_rs485(p.fd, &c.RS485); err != nil {
+		goto cleanup
 	}
 	p.timeout = c.Timeout
+	return
+cleanup:
+	syscall.Close(p.fd)
+	p.fd = -1
+	p.oldTermios = nil
 	return
 }
 

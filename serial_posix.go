@@ -3,10 +3,13 @@
 package serial
 
 import (
+	"errors"
 	"fmt"
 	"log"
+	"os"
 	"syscall"
 	"time"
+	"unsafe"
 )
 
 // port implements Port interface.
@@ -15,6 +18,22 @@ type port struct {
 	oldTermios *syscall.Termios
 
 	timeout time.Duration
+}
+
+const (
+	rs485_enabled        = (1 << 0)
+	rs485_rts_on_send    = (1 << 1)
+	rs485_rts_after_send = (1 << 2)
+	rs485_rx_during_tx   = (1 << 4)
+	tiocsrs485           = 0x542f
+)
+
+// rs485_ioctl_opts is used to configure RS485 options in the driver
+type rs485_ioctl_opts struct {
+	flags                 uint32
+	delay_rts_before_send uint32
+	delay_rts_after_send  uint32
+	padding               [5]uint32
 }
 
 // New allocates and returns a new serial port controller.
@@ -207,4 +226,43 @@ func newTermios(c *Config) (termios *syscall.Termios, err error) {
 	// VTIME: Time in deciseconds for noncanonical read.
 	// Both are unused as NDELAY is we utilized when opening device.
 	return
+}
+
+// enable_rs485 enable RS485 functionality of driver via an ioctl if the config says so
+func enable_rs485(fd int, config *RS485Config) error {
+	if config.Enabled {
+		rs485 := rs485_ioctl_opts{
+			rs485_enabled,
+			uint32(config.DelayRtsBeforeSend / time.Millisecond),
+			uint32(config.DelayRtsAfterSend / time.Millisecond),
+			[5]uint32{0, 0, 0, 0, 0},
+		}
+
+		if config.RtsHighDuringSend {
+			rs485.flags |= rs485_rts_on_send
+		}
+
+		if config.RtsHighAfterSend {
+			rs485.flags |= rs485_rts_after_send
+		}
+
+		if config.RxDuringTx {
+			rs485.flags |= rs485_rx_during_tx
+		}
+
+		r, _, errno := syscall.Syscall(
+			syscall.SYS_IOCTL,
+			uintptr(fd),
+			uintptr(tiocsrs485),
+			uintptr(unsafe.Pointer(&rs485)))
+
+		if errno != 0 {
+			return os.NewSyscallError("SYS_IOCTL (RS485)", errno)
+		}
+
+		if r != 0 {
+			return errors.New("Unknown error from SYS_IOCTL (RS485)")
+		}
+	}
+	return nil
 }

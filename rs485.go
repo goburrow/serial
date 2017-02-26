@@ -7,7 +7,7 @@ import (
 // platform independent RS485 config. Thie structure is ignored unless Enable is true.
 type RS485Config struct {
 	// Enable RS485 support
-	Enable bool
+	Enabled bool
 	// Delay RTS prior to send
 	DelayRtsBeforeSend time.Duration
 	// Delay RTS after send

@@ -29,6 +29,8 @@ type Config struct {
 	Parity string
 	// Read (Write) timeout.
 	Timeout time.Duration
+	// Configuration related to RS485
+	RS485 RS485Config
 }
 
 // Port is the interface for controlling serial port.

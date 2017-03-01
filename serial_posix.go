@@ -21,11 +21,11 @@ type port struct {
 }
 
 const (
-	rs485_enabled        = (1 << 0)
-	rs485_rts_on_send    = (1 << 1)
-	rs485_rts_after_send = (1 << 2)
-	rs485_rx_during_tx   = (1 << 4)
-	tiocsrs485           = 0x542f
+	rs485Enabled      = 1 << 0
+	rs485RTSOnSend    = 1 << 1
+	rs485RTSAfterSend = 1 << 2
+	rs485RXDuringTX   = 1 << 4
+	rs485Tiocs        = 0x542f
 )
 
 // rs485_ioctl_opts is used to configure RS485 options in the driver
@@ -57,17 +57,17 @@ func (p *port) Open(c *Config) (err error) {
 	// Backup current termios to restore on closing.
 	p.backupTermios()
 	if err = p.setTermios(termios); err != nil {
-		goto cleanup
+		// No need to restore termios
+		syscall.Close(p.fd)
+		p.fd = -1
+		p.oldTermios = nil
+		return err
 	}
-	if err = enable_rs485(p.fd, &c.RS485); err != nil {
-		goto cleanup
+	if err = enableRS485(p.fd, &c.RS485); err != nil {
+		p.Close()
+		return err
 	}
 	p.timeout = c.Timeout
-	return
-cleanup:
-	syscall.Close(p.fd)
-	p.fd = -1
-	p.oldTermios = nil
 	return
 }
 
@@ -228,41 +228,38 @@ func newTermios(c *Config) (termios *syscall.Termios, err error) {
 	return
 }
 
-// enable_rs485 enable RS485 functionality of driver via an ioctl if the config says so
-func enable_rs485(fd int, config *RS485Config) error {
-	if config.Enabled {
-		rs485 := rs485_ioctl_opts{
-			rs485_enabled,
-			uint32(config.DelayRtsBeforeSend / time.Millisecond),
-			uint32(config.DelayRtsAfterSend / time.Millisecond),
-			[5]uint32{0, 0, 0, 0, 0},
-		}
+// enableRS485 enables RS485 functionality of driver via an ioctl if the config says so
+func enableRS485(fd int, config *RS485Config) error {
+	if !config.Enabled {
+		return nil
+	}
+	rs485 := rs485_ioctl_opts{
+		rs485Enabled,
+		uint32(config.DelayRtsBeforeSend / time.Millisecond),
+		uint32(config.DelayRtsAfterSend / time.Millisecond),
+		[5]uint32{0, 0, 0, 0, 0},
+	}
 
-		if config.RtsHighDuringSend {
-			rs485.flags |= rs485_rts_on_send
-		}
+	if config.RtsHighDuringSend {
+		rs485.flags |= rs485RTSOnSend
+	}
+	if config.RtsHighAfterSend {
+		rs485.flags |= rs485RTSAfterSend
+	}
+	if config.RxDuringTx {
+		rs485.flags |= rs485RXDuringTX
+	}
 
-		if config.RtsHighAfterSend {
-			rs485.flags |= rs485_rts_after_send
-		}
-
-		if config.RxDuringTx {
-			rs485.flags |= rs485_rx_during_tx
-		}
-
-		r, _, errno := syscall.Syscall(
-			syscall.SYS_IOCTL,
-			uintptr(fd),
-			uintptr(tiocsrs485),
-			uintptr(unsafe.Pointer(&rs485)))
-
-		if errno != 0 {
-			return os.NewSyscallError("SYS_IOCTL (RS485)", errno)
-		}
-
-		if r != 0 {
-			return errors.New("Unknown error from SYS_IOCTL (RS485)")
-		}
+	r, _, errno := syscall.Syscall(
+		syscall.SYS_IOCTL,
+		uintptr(fd),
+		uintptr(rs485Tiocs),
+		uintptr(unsafe.Pointer(&rs485)))
+	if errno != 0 {
+		return os.NewSyscallError("SYS_IOCTL (RS485)", errno)
+	}
+	if r != 0 {
+		return errors.New("serial: unknown error from SYS_IOCTL (RS485)")
 	}
 	return nil
 }

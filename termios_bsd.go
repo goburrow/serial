@@ -1,5 +1,4 @@
-// +build linux
-// +build mips mipsle mips64 mips64le
+// +build freebsd openbsd netbsd
 
 package serial
 
@@ -8,9 +7,9 @@ import (
 )
 
 func cfSetIspeed(termios *syscall.Termios, speed uint32) {
-	// MIPS has no Ispeed field in termios.
+	termios.Ispeed = speed
 }
 
 func cfSetOspeed(termios *syscall.Termios, speed uint32) {
-	// MIPS has no Ospeed field in termios.
+	termios.Ospeed = speed
 }

@@ -173,9 +173,9 @@ func newTermios(c *Config) (termios *syscall.Termios, err error) {
 	}
 	termios.Cflag |= flag
 	// Input baud.
-	termios.Ispeed = flag
+	cfSetIspeed(termios, flag)
 	// Output baud.
-	termios.Ospeed = flag
+	cfSetOspeed(termios, flag)
 	// Character size.
 	if c.DataBits == 0 {
 		flag = syscall.CS8

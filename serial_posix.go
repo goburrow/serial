@@ -43,6 +43,11 @@ func New() Port {
 
 // Open connects to the given serial port.
 func (p *port) Open(c *Config) (err error) {
+	var custom_baudrate int
+	if isCustomBaudrate(c.BaudRate) {
+		custom_baudrate = c.BaudRate
+		c.BaudRate = 38400
+	}
 	termios, err := newTermios(c)
 	if err != nil {
 		return
@@ -68,6 +73,15 @@ func (p *port) Open(c *Config) (err error) {
 		return err
 	}
 	p.timeout = c.Timeout
+
+	if custom_baudrate > 0 {
+		c.BaudRate = custom_baudrate
+		ok, errno := setSpecialBaudrate(p.fd, custom_baudrate)
+		if !ok {
+			return error(errno)
+		}
+	}
+
 	return
 }
 

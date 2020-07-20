@@ -37,6 +37,8 @@ type Config struct {
 type RS485Config struct {
 	// Enable RS485 support
 	Enabled bool
+	// Use RS485 Alternative Operation, directly handle RTS pin via ioctl
+	RS485Alternative bool
 	// Delay RTS prior to send
 	DelayRtsBeforeSend time.Duration
 	// Delay RTS after send

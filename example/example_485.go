@@ -29,6 +29,16 @@ func main() {
 	flag.StringVar(&message, "m", "serial", "message")
 	flag.Parse()
 
+	rs485Config := serial.RS485Config{
+		Enabled:            true,
+		RS485Alternative:   true,
+		DelayRtsBeforeSend: 1 * time.Millisecond,
+		DelayRtsAfterSend:  1 * time.Millisecond,
+		RtsHighDuringSend:  true,
+		RtsHighAfterSend:   true,
+		RxDuringTx:         false,
+	}
+
 	config := serial.Config{
 		Address:  address,
 		BaudRate: baudrate,
@@ -36,7 +46,9 @@ func main() {
 		StopBits: stopbits,
 		Parity:   parity,
 		Timeout:  30 * time.Second,
+		RS485:    rs485Config,
 	}
+
 	log.Printf("connecting %+v", config)
 	port, err := serial.Open(&config)
 	if err != nil {
@@ -51,10 +63,18 @@ func main() {
 		log.Println("closed")
 	}()
 
-	if _, err = port.Write([]byte(message)); err != nil {
-		log.Fatal(err)
-	}
-	if _, err = io.Copy(os.Stdout, port); err != nil {
-		log.Fatal(err)
+	go func() {
+		if _, err = io.Copy(os.Stdout, port); err != nil {
+			log.Println(err)
+		}
+	}()
+
+	for {
+		log.Println("sending data")
+		if _, err = port.Write([]byte(message + "\r\n")); err != nil {
+			log.Println(err)
+		}
+
+		time.Sleep(1 * time.Second)
 	}
 }

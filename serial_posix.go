@@ -10,11 +10,14 @@ import (
 	"syscall"
 	"time"
 	"unsafe"
+
+	"github.com/pkg/term/termios"
 )
 
 // port implements Port interface.
 type port struct {
 	fd         int
+	config     *Config
 	oldTermios *syscall.Termios
 
 	timeout time.Duration
@@ -26,6 +29,9 @@ const (
 	rs485RTSAfterSend = 1 << 2
 	rs485RXDuringTX   = 1 << 4
 	rs485Tiocs        = 0x542f
+	rs485Tiocmbis     = 0x5416
+	rs485Tiocmbic     = 0x5417
+	rs485Tiocmrts     = 4
 )
 
 // rs485_ioctl_opts is used to configure RS485 options in the driver
@@ -43,6 +49,7 @@ func New() Port {
 
 // Open connects to the given serial port.
 func (p *port) Open(c *Config) (err error) {
+	p.config = c
 	termios, err := newTermios(c)
 	if err != nil {
 		return
@@ -116,7 +123,49 @@ func (p *port) Read(b []byte) (n int, err error) {
 
 // Write writes data to the serial port.
 func (p *port) Write(b []byte) (n int, err error) {
-	n, err = syscall.Write(p.fd, b)
+	if p.config.RS485.RS485Alternative && p.config.RS485.Enabled {
+		var operation int32
+		operation = rs485Tiocmrts
+
+		// assert RTS pin Enable
+		_, _, errno := syscall.Syscall(
+			syscall.SYS_IOCTL,
+			uintptr(p.fd),
+			uintptr(rs485Tiocmbis),
+			uintptr(unsafe.Pointer(&operation)))
+
+		if errno != 0 {
+			return 0, os.NewSyscallError(fmt.Sprintf("SYS_IOCTL (RS485) Enable RTS %d, Before Send.", errno), errno)
+		}
+
+		if p.config.RS485.RtsHighDuringSend {
+			time.Sleep(p.config.RS485.DelayRtsBeforeSend)
+		}
+
+		n, err = syscall.Write(p.fd, b)
+
+		if err != nil {
+			// wait until all IO operations are done.
+			_ = termios.Tcdrain(uintptr(p.fd))
+		}
+
+		if p.config.RS485.RtsHighAfterSend {
+			time.Sleep(p.config.RS485.DelayRtsAfterSend)
+		}
+
+		_, _, errno = syscall.Syscall(
+			syscall.SYS_IOCTL,
+			uintptr(p.fd),
+			uintptr(rs485Tiocmbic),
+			uintptr(unsafe.Pointer(&operation)))
+
+		if errno != 0 {
+			return 0, os.NewSyscallError(fmt.Sprintf("SYS_IOCTL (RS485) Enable RTS %d, After Send.", errno), errno)
+		}
+
+	} else {
+		n, err = syscall.Write(p.fd, b)
+	}
 	return
 }
 
@@ -231,6 +280,9 @@ func newTermios(c *Config) (termios *syscall.Termios, err error) {
 // enableRS485 enables RS485 functionality of driver via an ioctl if the config says so
 func enableRS485(fd int, config *RS485Config) error {
 	if !config.Enabled {
+		return nil
+	}
+	if config.RS485Alternative {
 		return nil
 	}
 	rs485 := rs485_ioctl_opts{

@@ -1,5 +1,3 @@
-// +build freebsd netbsd
-
 package serial
 
 import (
@@ -27,7 +25,6 @@ var baudRates = map[int]uint32{
 	57600:  syscall.B57600,
 	115200: syscall.B115200,
 	230400: syscall.B230400,
-	460800: syscall.B460800,
 }
 
 var charSizes = map[int]uint32{
@@ -75,19 +72,19 @@ func tcgetattr(fd int, termios *syscall.Termios) (err error) {
 
 // fdget returns index and offset of fd in fds.
 func fdget(fd int, fds *syscall.FdSet) (index, offset int) {
-	index = fd / (syscall.FD_SETSIZE / len(fds.X__fds_bits)) % len(fds.X__fds_bits)
-	offset = fd % (syscall.FD_SETSIZE / len(fds.X__fds_bits))
+	index = fd / (syscall.FD_SETSIZE / len(fds.Bits)) % len(fds.Bits)
+	offset = fd % (syscall.FD_SETSIZE / len(fds.Bits))
 	return
 }
 
 // fdset implements FD_SET macro.
 func fdset(fd int, fds *syscall.FdSet) {
 	idx, pos := fdget(fd, fds)
-	fds.X__fds_bits[idx] = 1 << uint(pos)
+	fds.Bits[idx] = 1 << uint(pos)
 }
 
 // fdisset implements FD_ISSET macro.
 func fdisset(fd int, fds *syscall.FdSet) bool {
 	idx, pos := fdget(fd, fds)
-	return fds.X__fds_bits[idx]&(1<<uint(pos)) != 0
+	return fds.Bits[idx]&(1<<uint(pos)) != 0
 }

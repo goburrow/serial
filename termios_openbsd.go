@@ -1,5 +1,3 @@
-// +build freebsd netbsd
-
 package serial
 
 import (
@@ -7,9 +5,9 @@ import (
 )
 
 func cfSetIspeed(termios *syscall.Termios, speed uint32) {
-	termios.Ispeed = speed
+	termios.Ispeed = int32(speed)
 }
 
 func cfSetOspeed(termios *syscall.Termios, speed uint32) {
-	termios.Ospeed = speed
+	termios.Ospeed = int32(speed)
 }

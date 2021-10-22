@@ -156,13 +156,17 @@ func (p *port) setSerialConfig(c *Config) error {
 }
 
 func newHandle(c *Config) (handle syscall.Handle, err error) {
+	name := c.Address
+	if len(name) > 0 && name[0] != '\\' {
+		name = "\\\\.\\" + name
+	}
 	handle, err = syscall.CreateFile(
-		syscall.StringToUTF16Ptr(c.Address),
+		syscall.StringToUTF16Ptr(name),
 		syscall.GENERIC_READ|syscall.GENERIC_WRITE,
-		0,   // mode
-		nil, // security
+		0,                     // mode
+		nil,                   // security
 		syscall.OPEN_EXISTING, // create mode
-		0, // attributes
-		0) // templates
+		0,                     // attributes
+		0)                     // templates
 	return
 }

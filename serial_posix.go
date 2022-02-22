@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 	"unsafe"
+    "golang.org/x/sys/unix"
 )
 
 // port implements Port interface.
@@ -43,6 +44,11 @@ func New() Port {
 
 // Open connects to the given serial port.
 func (p *port) Open(c *Config) (err error) {
+	var custom_baudrate int
+	if isCustomBaudrate(c.BaudRate) {
+		custom_baudrate = c.BaudRate
+		c.BaudRate = 38400
+	}
 	termios, err := newTermios(c)
 	if err != nil {
 		return
@@ -68,6 +74,15 @@ func (p *port) Open(c *Config) (err error) {
 		return err
 	}
 	p.timeout = c.Timeout
+
+	if custom_baudrate > 0 {
+		c.BaudRate = custom_baudrate
+		ok, errno := setSpecialBaudrate(p.fd, custom_baudrate)
+		if !ok {
+			return error(errno)
+		}
+	}
+
 	return
 }
 
@@ -85,33 +100,33 @@ func (p *port) Close() (err error) {
 // Read reads from serial port. Port must be opened before calling this method.
 // It is blocked until all data received or timeout after p.timeout.
 func (p *port) Read(b []byte) (n int, err error) {
-	var rfds syscall.FdSet
+	fds := []unix.PollFd{{Fd: int32(p.fd), Events: unix.POLLIN}}
+	deadline := time.Now().Add(p.timeout)
 
-	fd := p.fd
-	fdset(fd, &rfds)
-
-	var tv *syscall.Timeval
-	if p.timeout > 0 {
-		timeout := syscall.NsecToTimeval(p.timeout.Nanoseconds())
-		tv = &timeout
-	}
 	for {
-		// If syscall.Select() returns EINTR (Interrupted system call), retry it
-		if err = syscallSelect(fd+1, &rfds, nil, nil, tv); err == nil {
+		timeout := -1
+		if p.timeout > 0 {
+			timeout = int(deadline.Sub(time.Now()).Milliseconds())
+		}
+
+		n, err := unix.Poll(fds, timeout)
+		if err != nil {
+			if errors.Is(err, syscall.EINTR) {
+				continue
+			}
+			return 0, fmt.Errorf("serial: could not poll: %v", err)
+		}
+
+		if n == 0 {
+			return 0, ErrTimeout
+		}
+
+		if fds[0].Revents&unix.POLLIN == unix.POLLIN {
 			break
 		}
-		if err != syscall.EINTR {
-			err = fmt.Errorf("serial: could not select: %v", err)
-			return
-		}
 	}
-	if !fdisset(fd, &rfds) {
-		// Timeout
-		err = ErrTimeout
-		return
-	}
-	n, err = syscall.Read(fd, b)
-	return
+
+	return syscall.Read(p.fd, b)
 }
 
 // Write writes data to the serial port.

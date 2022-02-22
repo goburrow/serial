@@ -101,3 +101,38 @@ func fdisset(fd int, fds *syscall.FdSet) bool {
 	idx, pos := fdget(fd, fds)
 	return fds.Bits[idx]&(1<<uint(pos)) != 0
 }
+
+const (
+	// baudrate ioctls
+	TCGETS2 = 0x802C542A
+	TCSETS2 = 0x402C542B
+	CBAUD   = 0x100F
+	BOTHER  = 0x1000 //0o010000
+)
+
+func isCustomBaudrate(baudrate int) bool {
+	var ok bool
+	_, ok = baudRates[baudrate]
+	return !ok
+}
+
+func setSpecialBaudrate(fd int, baudrate int) (bool, syscall.Errno) {
+	var buf [64]int32 // right size is 44 on x86_64, allow for some growth
+
+	_, _, errno := syscall.Syscall(uintptr(syscall.SYS_IOCTL),
+		uintptr(fd), uintptr(TCGETS2), uintptr(unsafe.Pointer(&buf)))
+	if errno != 0 {
+		return false, errno
+	}
+	// set custom speed
+	buf[2] &^= CBAUD
+	buf[2] |= BOTHER
+	buf[9], buf[10] = int32(baudrate), int32(baudrate)
+	_, _, errno = syscall.Syscall(uintptr(syscall.SYS_IOCTL),
+		uintptr(fd), uintptr(TCSETS2), uintptr(unsafe.Pointer(&buf)))
+	if errno != 0 {
+		return false, errno
+	}
+
+	return true, syscall.Errno(0)
+}

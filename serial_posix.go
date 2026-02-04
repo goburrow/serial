@@ -1,3 +1,4 @@
+//go:build darwin || linux || freebsd || openbsd || netbsd
 // +build darwin linux freebsd openbsd netbsd
 
 package serial
@@ -111,12 +112,14 @@ func (p *port) Read(b []byte) (n int, err error) {
 		return
 	}
 	n, err = syscall.Read(fd, b)
+	n = max(0, n)
 	return
 }
 
 // Write writes data to the serial port.
 func (p *port) Write(b []byte) (n int, err error) {
 	n, err = syscall.Write(p.fd, b)
+	n = max(0, n)
 	return
 }
 

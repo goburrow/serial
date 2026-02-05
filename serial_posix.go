@@ -110,13 +110,19 @@ func (p *port) Read(b []byte) (n int, err error) {
 		err = ErrTimeout
 		return
 	}
-	n, err = syscall.Read(fd, b)
+	if n, err = syscall.Read(fd, b); err != nil {
+		return 0, err
+	}
+
 	return
 }
 
 // Write writes data to the serial port.
 func (p *port) Write(b []byte) (n int, err error) {
-	n, err = syscall.Write(p.fd, b)
+	if n, err = syscall.Write(p.fd, b); err != nil {
+		return 0, err
+	}
+
 	return
 }
 

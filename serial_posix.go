@@ -111,6 +111,14 @@ func (p *port) Read(b []byte) (n int, err error) {
 		return
 	}
 	n, err = syscall.Read(fd, b)
+	if n < 0 {
+		// underlying syscall.Read returns -1 on error, but we want to return 0 to be consistent with io.Reader interface.
+		if err == nil {
+			// This should not happen, but just in case.
+			err = fmt.Errorf("serial: read returned %v without error", n)
+		}
+		n = 0
+	}
 	return
 }
 

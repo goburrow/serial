@@ -29,9 +29,25 @@ type Config struct {
 	Parity string
 	// Read (Write) timeout.
 	Timeout time.Duration
+	// Flow control (default FlowControlNone)
+	FlowControl FlowControl
 	// Configuration related to RS485
 	RS485 RS485Config
 }
+
+// FlowControl selects how the line paces data between the two ends.
+type FlowControl int
+
+const (
+	// FlowControlNone uses no flow control (the default).
+	FlowControlNone FlowControl = iota
+	// FlowControlRTSCTS uses hardware flow control on the RTS and CTS lines.
+	FlowControlRTSCTS
+	// FlowControlXONXOFF uses software flow control: the XON (0x11) and
+	// XOFF (0x13) characters pause and resume transmission in both
+	// directions. Those two byte values cannot then be carried as data.
+	FlowControlXONXOFF
+)
 
 // platform independent RS485 config. Thie structure is ignored unless Enable is true.
 type RS485Config struct {

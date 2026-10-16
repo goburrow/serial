@@ -10,6 +10,8 @@ import (
 	"syscall"
 	"time"
 	"unsafe"
+
+	"golang.org/x/sys/unix"
 )
 
 // port implements Port interface.
@@ -221,6 +223,25 @@ func newTermios(c *Config) (termios *syscall.Termios, err error) {
 	// CREAD: Enable receiver.
 	// CLOCAL: Ignore control lines.
 	termios.Cflag |= syscall.CREAD | syscall.CLOCAL
+	// Flow control
+	switch c.FlowControl {
+	case FlowControlNone:
+		// noop
+	case FlowControlRTSCTS:
+		// CRTSCTS: Enable RTS/CTS (hardware) flow control.
+		termios.Cflag |= unix.CRTSCTS
+	case FlowControlXONXOFF:
+		// IXON: Enable XON/XOFF flow control on output.
+		// IXOFF: Enable XON/XOFF flow control on input.
+		termios.Iflag |= syscall.IXON | syscall.IXOFF
+		// The termios starts zeroed, so the start and stop characters
+		// must be set or they would both be NUL.
+		termios.Cc[unix.VSTART] = 0x11
+		termios.Cc[unix.VSTOP] = 0x13
+	default:
+		err = fmt.Errorf("serial: unsupported flow control %v", c.FlowControl)
+		return
+	}
 	// Special characters.
 	// VMIN: Minimum number of characters for noncanonical read.
 	// VTIME: Time in deciseconds for noncanonical read.

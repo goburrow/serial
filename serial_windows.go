@@ -143,6 +143,9 @@ func (p *port) setSerialConfig(c *Config) error {
 		return fmt.Errorf("serial: unsupported parity %v", c.Parity)
 	}
 	dcb.Pad_cgo_0[0] |= 0x01 // fBinary
+	if c.FlowControl != FlowControlNone {
+		return fmt.Errorf("serial: flow control %v is not supported on windows", c.FlowControl)
+	}
 
 	err := GetCommState(p.handle, &p.oldDCB)
 	if err != nil {
